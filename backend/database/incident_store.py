@@ -1,0 +1,226 @@
+"""
+backend/database/incident_store.py
+===================================
+All Supabase reads and writes for incidents, analyses and the audit timeline.
+
+Routers and services talk to this module instead of building PostgREST
+queries themselves, so the table layout lives in one place (see
+``supabase/migrations/*_week1_foundation.sql``).
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from supabase import Client
+
+from models.incident import (
+    AuditEventType,
+    IncidentStatus,
+    validate_transition,
+)
+
+INCIDENTS = "incidents"
+ANALYSES = "incident_analyses"
+AUDIT_EVENTS = "audit_events"
+CHANGE_STATUS_FN = "change_incident_status"
+
+
+class IncidentNotFoundError(LookupError):
+    pass
+
+
+class ConcurrentUpdateError(RuntimeError):
+    """The incident's status changed between our read and our write."""
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(str(value))
+        return True
+    except ValueError:
+        return False
+
+
+class IncidentStore:
+    def __init__(self, client: Client) -> None:
+        self._sb = client
+
+    # ------------------------------------------------------------------
+    # Audit timeline (FR-17) — insert-only, the DB rejects UPDATE/DELETE
+    # ------------------------------------------------------------------
+
+    def append_event(
+        self,
+        incident_id: str | None,
+        event_type: AuditEventType | str,
+        payload: dict[str, Any] | None = None,
+        actor: str = "system",
+        occurred_at: str | None = None,
+    ) -> dict:
+        row = {
+            "incident_id": incident_id,
+            "event_type": AuditEventType(event_type).value,
+            "actor": actor,
+            "payload": payload or {},
+            "occurred_at": occurred_at or _now_iso(),
+        }
+        return self._sb.table(AUDIT_EVENTS).insert(row).execute().data[0]
+
+    def append_events(self, incident_id: str, events: list[dict]) -> list[dict]:
+        """Bulk-insert pipeline trace events (each: event_type, payload, occurred_at)."""
+        if not events:
+            return []
+        rows = [
+            {
+                "incident_id": incident_id,
+                "event_type": AuditEventType(e["event_type"]).value,
+                "actor": e.get("actor", "system"),
+                "payload": e.get("payload", {}),
+                "occurred_at": e.get("occurred_at") or _now_iso(),
+            }
+            for e in events
+        ]
+        return self._sb.table(AUDIT_EVENTS).insert(rows).execute().data
+
+    def get_timeline(self, incident_id: str) -> list[dict]:
+        self.get_incident(incident_id)  # 404 for unknown incidents
+        return (
+            self._sb.table(AUDIT_EVENTS)
+            .select("*")
+            .eq("incident_id", incident_id)
+            .order("occurred_at")
+            .order("id")
+            .execute()
+            .data
+        )
+
+    # ------------------------------------------------------------------
+    # Incidents
+    # ------------------------------------------------------------------
+
+    def create_incident(
+        self,
+        service_id: str,
+        alert: str,
+        metadata: dict | None = None,
+        actor: str = "system",
+    ) -> dict:
+        incident = (
+            self._sb.table(INCIDENTS)
+            .insert(
+                {
+                    "service_id": service_id,
+                    "alert": alert,
+                    "metadata": metadata or {},
+                    "status": IncidentStatus.OPEN.value,
+                }
+            )
+            .execute()
+            .data[0]
+        )
+        self.append_event(
+            incident["id"],
+            AuditEventType.INCIDENT_CREATED,
+            {"service_id": service_id, "status": IncidentStatus.OPEN.value},
+            actor=actor,
+        )
+        return incident
+
+    def get_incident(self, incident_id: str) -> dict:
+        # incidents.id is a Postgres uuid: a malformed value would make the
+        # query itself fail (22P02 -> HTTP 500). It can't match any row, so
+        # treat it as not found.
+        if not _is_uuid(incident_id):
+            raise IncidentNotFoundError(incident_id)
+        rows =self._sb.table(INCIDENTS).select("*").eq("id", incident_id).execute().data
+        if not rows:
+            raise IncidentNotFoundError(incident_id)
+        return rows[0]
+
+    def change_status(
+        self,
+        incident_id: str,
+        target: IncidentStatus | str,
+        actor: str,
+        note: str | None = None,
+    ) -> dict:
+        """Move an incident to ``target`` (FR-15) and record it on the timeline.
+
+        Raises ``InvalidTransitionError`` for illegal jumps and
+        ``ConcurrentUpdateError`` if another request changed the status first.
+        """
+        target = IncidentStatus(target)
+        incident = self.get_incident(incident_id)
+        current = IncidentStatus(incident["status"])
+        validate_transition(current, target)
+
+        # One DB transaction: compare-and-set update (only if the status is
+        # still `current`) + the `incident.status_changed` audit event.
+        # Either both are written or neither is. First-time timestamps
+        # (STATUS_TIMESTAMP_COLUMN) are stamped inside the function.
+        # See supabase/migrations/*_atomic_status_change.sql.
+        try:
+            updated = (
+                self._sb.rpc(
+                    CHANGE_STATUS_FN,
+                    {
+                        "p_incident_id": incident_id,
+                        "p_from": current.value,
+                        "p_to": target.value,
+                        "p_actor": actor,
+                        "p_note": note,
+                    },
+                )
+                .execute()
+                .data
+            )
+        except Exception as exc:
+            if "PGRST202" in str(exc) or "Could not find the function" in str(exc):
+                raise RuntimeError(
+                    f"Database function {CHANGE_STATUS_FN} is missing. Apply "
+                    "supabase/migrations/20261122000000_atomic_status_change.sql."
+                ) from exc
+            raise
+        if not updated:
+            raise ConcurrentUpdateError(
+                f"Incident {incident_id} changed status while this request was in flight"
+            )
+        return updated[0]
+
+    # ------------------------------------------------------------------
+    # Analyses
+    # ------------------------------------------------------------------
+
+    def save_analysis(self, incident_id: str, record: dict) -> dict:
+        """Persist one analysis and copy its classification onto the incident."""
+        saved = (
+            self._sb.table(ANALYSES)
+            .insert({"incident_id": incident_id, **record})
+            .execute()
+            .data[0]
+        )
+        self._sb.table(INCIDENTS).update(
+            {
+                "incident_category": record["incident_category"],
+                "severity": record["severity"],
+            }
+        ).eq("id", incident_id).execute()
+        return saved
+
+    def list_analyses(self, incident_id: str) -> list[dict]:
+        self.get_incident(incident_id)
+        return (
+            self._sb.table(ANALYSES)
+            .select("*")
+            .eq("incident_id", incident_id)
+            .order("created_at", desc=True)
+            .execute()
+            .data
+        )

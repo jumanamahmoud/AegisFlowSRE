@@ -1,0 +1,290 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Set up database package and Neo4j client — connection and lifecycle": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305512134
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305517856
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307109426
+      }
+    ],
+    "2. Implement Neo4j bi-temporal dependency upsert": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305512230
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307112742
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307166104
+      }
+    ],
+    "3.1 Implement `get_blast_radius(failed_service_id, max_hops=3)` in `Neo4jClient`": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305512355
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307115894
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307169585
+      }
+    ],
+    "3.2 Implement `get_service_context(service_id)` in `Neo4jClient`": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305512421
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307120363
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307172572
+      }
+    ],
+    "4. Checkpoint — database layer complete": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305512497
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307176058
+      }
+    ],
+    "5. Implement LangGraph pipeline — state definition and graph enrichment node": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305512614
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307179725
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307641260
+      }
+    ],
+    "6. Implement LangGraph pipeline — Jev gate node and routing": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305512693
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307645327
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307745822
+      }
+    ],
+    "7. Implement LangGraph pipeline — LLM reason node": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305512767
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307648532
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307749086
+      }
+    ],
+    "8. Implement LangGraph pipeline — emit response node and graph assembly": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305512865
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307754433
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307841335
+      }
+    ],
+    "9. Checkpoint — engine layer complete": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305512993
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307844692
+      }
+    ],
+    "10. Set up routers package and topology router": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305513069
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307850618
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307928259
+      }
+    ],
+    "11. Implement incidents router": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305513158
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307853957
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307931509
+      }
+    ],
+    "12. Implement FastAPI application entry point and lifespan manager": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305513246
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307936191
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794308029342
+      }
+    ],
+    "13. Checkpoint — full application wired": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305513341
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794308035707
+      }
+    ],
+    "14.1 Unit tests for `Neo4jClient`": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305513450
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794308341899
+      }
+    ],
+    "14.2 Unit tests for FastAPI lifespan and health endpoint": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305513567
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794308345376
+      }
+    ],
+    "14.3 Unit tests for pipeline nodes": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305513684
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794308352183
+      }
+    ],
+    "14.4 Unit tests for HTTP endpoints": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305513793
+      },
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794308355654
+      }
+    ],
+    "16. Final checkpoint — all layers integrated": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794305513974
+      }
+    ],
+    "3. Implement Neo4j blast radius and service context queries": [
+      {
+        "executionId": "45b571b3-e937-406b-93e7-78b6140d6ef4",
+        "chatSessionId": "sess_16456d2d-b64d-4c1b-a236-4312770c82ac",
+        "timestamp": 1794307172641
+      }
+    ]
+  }
+}
