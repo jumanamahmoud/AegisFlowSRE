@@ -1,0 +1,39 @@
+{
+  "receiver": "aegisflow",
+  "status": "firing",
+  "orgId": 1,
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "CheckoutHighErrorRate",
+        "service": "checkout-service",
+        "grafana_folder": "Production",
+        "severity": "high"
+      },
+      "annotations": {
+        "summary": "checkout-service 5xx rate above 5%",
+        "description": "HTTP 5xx responses are 7.4% of traffic over the last 10 minutes."
+      },
+      "startsAt": "2026-11-24T09:14:30Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://grafana.example.internal/alerting/grafana/fe4b2c/view",
+      "fingerprint": "8f2e6a1c0b9d3e47",
+      "silenceURL": "https://grafana.example.internal/alerting/silence/new",
+      "dashboardURL": "https://grafana.example.internal/d/checkout",
+      "panelURL": "https://grafana.example.internal/d/checkout?viewPanel=4",
+      "values": {"B": 7.4},
+      "valueString": "[ var='B' labels={service=checkout-service} value=7.4 ]"
+    }
+  ],
+  "groupLabels": {"alertname": "CheckoutHighErrorRate"},
+  "commonLabels": {"alertname": "CheckoutHighErrorRate", "service": "checkout-service"},
+  "commonAnnotations": {},
+  "externalURL": "https://grafana.example.internal/",
+  "version": "1",
+  "groupKey": "{}:{alertname=\"CheckoutHighErrorRate\"}",
+  "truncatedAlerts": 0,
+  "title": "[FIRING:1] CheckoutHighErrorRate Production",
+  "state": "alerting",
+  "message": "**Firing**\n\nValue: B=7.4"
+}

@@ -35,6 +35,7 @@ from core.logging import request_id_var
 from database.incident_store import (
     AnalysisAlreadyPendingError,
     ConcurrentUpdateError,
+    DuplicateActiveIncidentError,
     IncidentNotFoundError,
     IncidentStore,
 )
@@ -242,7 +243,7 @@ def change_incident_status(
         updated = store.change_status(incident_id, payload.status, user.actor, payload.note)
     except IncidentNotFoundError:
         raise _not_found()
-    except (InvalidTransitionError, ConcurrentUpdateError) as exc:
+    except (InvalidTransitionError, ConcurrentUpdateError, DuplicateActiveIncidentError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return _incident(updated)
 
