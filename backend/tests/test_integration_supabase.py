@@ -34,20 +34,50 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def live_client():
+    """Real routers + real Supabase + a REAL background worker pool.
+
+    Login is stubbed with a fixed responder (token verification is unit-tested
+    in test_auth.py; signing a real Supabase token needs a real account).
+    """
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from database.supabase_client import reset_supabase_client
-    from routers.incidents import get_pipeline, router
+    from core.auth import Principal, Role, get_current_user
+    from database.incident_store import IncidentStore
+    from database.supabase_client import get_supabase, reset_supabase_client
+    from routers.incidents import router
+    from services.analysis_queue import AnalysisQueue, get_analysis_queue
     from tests.conftest import make_pipeline_state
 
     reset_supabase_client()
+    queue = AnalysisQueue(
+        store_factory=lambda: IncidentStore(get_supabase()),
+        pipeline=lambda a, s: make_pipeline_state(),
+        max_workers=2,
+    )
     app = FastAPI()
     app.include_router(router, prefix="/incidents")
-    app.dependency_overrides[get_pipeline] = lambda: (lambda a, s: make_pipeline_state())
+    app.dependency_overrides[get_analysis_queue] = lambda: queue
+    app.dependency_overrides[get_current_user] = lambda: Principal(
+        user_id="00000000-0000-0000-0000-00000000a1e7", email="integration-test@aegisflow.local",
+        role=Role.RESPONDER,
+    )
     with TestClient(app) as client:
         yield client
+    queue.shutdown()
     reset_supabase_client()
+
+
+def _wait_for_analysis(client, incident_id, timeout=30.0):
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        incident = client.get(f"/incidents/{incident_id}").json()
+        if incident["analysis_status"] in ("completed", "failed"):
+            return incident
+        time.sleep(0.25)
+    raise AssertionError(f"analysis still {incident['analysis_status']} after {timeout}s")
 
 
 def test_analyzed_incident_saved_and_timeline_read_back(live_client):
@@ -59,30 +89,69 @@ def test_analyzed_incident_saved_and_timeline_read_back(live_client):
             "metadata": {"integration_test": True},
         },
     )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    incident_id = body["incident_id"]
+    assert resp.status_code == 202, resp.text
+    incident_id = resp.json()["incident_id"]
 
-    incident = live_client.get(f"/incidents/{incident_id}").json()
+    incident = _wait_for_analysis(live_client, incident_id)
+    assert incident["analysis_status"] == "completed", incident.get("analysis_error")
     assert incident["status"] == "open"
     assert incident["severity"] == "Critical"
 
     analyses = live_client.get(f"/incidents/{incident_id}/analyses").json()
-    assert analyses[0]["id"] == body["analysis_id"]
+    assert len(analyses) == 1
     assert analyses[0]["model_name"] == "openai/gpt-oss-120b"
     assert analyses[0]["total_tokens"] == 642
 
-    events = [e["event_type"] for e in live_client.get(f"/incidents/{incident_id}/timeline").json()]
-    assert events == [
-        "incident.created", "analysis.started", "graph.enriched",
-        "triage.completed", "ai.invoked", "analysis.saved",
+    events = live_client.get(f"/incidents/{incident_id}/timeline").json()
+    assert [e["event_type"] for e in events] == [
+        "incident.created", "analysis.queued", "analysis.started", "alert.sanitized",
+        "graph.enriched", "triage.completed", "ai.invoked", "analysis.saved",
     ]
+    assert events[0]["actor"] == "integration-test@aegisflow.local"
 
-    # Lifecycle round trip
+    # Lifecycle round trip; the actor comes from the login, not the body
     assert live_client.patch(f"/incidents/{incident_id}/status",
-                             json={"status": "acknowledged", "actor": "integration-test"}).status_code == 200
+                             json={"status": "acknowledged", "actor": "spoofed"}).status_code == 200
+    assert live_client.get(f"/incidents/{incident_id}/timeline").json()[-1]["actor"] ==         "integration-test@aegisflow.local"
     assert live_client.patch(f"/incidents/{incident_id}/status",
                              json={"status": "closed"}).status_code == 409
+
+
+def test_double_analyze_while_pending_is_409(live_client):
+    created = live_client.post("/incidents/", json={
+        "service_id": "payment-service", "alert": "[integration test] double click",
+        "metadata": {"integration_test": True},
+    }).json()
+    first = live_client.post("/incidents/analyze", json={
+        "service_id": "x", "alert": "x", "incident_id": created["id"]})
+    second = live_client.post("/incidents/analyze", json={
+        "service_id": "x", "alert": "x", "incident_id": created["id"]})
+    assert first.status_code == 202
+    # The second either hits the pending job (409) or arrives after it finished (202).
+    assert second.status_code in (202, 409)
+    _wait_for_analysis(live_client, created["id"])
+
+
+def test_week2_schema_present():
+    """user_roles table and analysis_status column exist (week2 migration applied)."""
+    from database.supabase_client import get_supabase
+
+    sb = get_supabase()
+    sb.table("user_roles").select("user_id,role,updated_by").limit(1).execute()
+    sb.table("incidents").select("analysis_status,analysis_error,analysis_updated_at").limit(1).execute()
+
+
+def test_user_roles_not_readable_with_publishable_key():
+    from supabase import create_client
+
+    from database.supabase_client import supabase_url
+
+    key = os.environ.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "").strip()
+    if not key:
+        pytest.skip("no publishable key in .env to test with")
+    public = create_client(supabase_url(), key)
+    with pytest.raises(Exception, match="permission denied|42501"):
+        public.table("user_roles").select("*").execute()
 
 
 def test_audit_events_cannot_be_modified_in_database(live_client):

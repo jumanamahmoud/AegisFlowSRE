@@ -44,6 +44,9 @@ _DEFAULTS = {
         "acknowledged_at": None,
         "resolved_at": None,
         "closed_at": None,
+        "analysis_status": "none",
+        "analysis_error": None,
+        "analysis_updated_at": None,
         "created_at": _now(),
         "updated_at": _now(),
     },
@@ -58,6 +61,7 @@ _UUID_COLUMNS = {
     "incidents": ("id",),
     "incident_analyses": ("id", "incident_id"),
     "audit_events": ("incident_id",),
+    "user_roles": ("user_id",),
 }
 
 
@@ -103,6 +107,10 @@ class _Query:
         self._filters.append((col, value))
         return self
 
+    def in_(self, col: str, values):
+        self._filters.append((col, ("__in__", tuple(values))))
+        return self
+
     def order(self, col: str, desc: bool = False):
         self._order.append((col, desc))
         return self
@@ -113,7 +121,13 @@ class _Query:
 
     # --- execution ---
     def _matches(self, row: dict) -> bool:
-        return all(row.get(c) == v for c, v in self._filters)
+        for col, value in self._filters:
+            if isinstance(value, tuple) and value and value[0] == "__in__":
+                if row.get(col) not in value[1]:
+                    return False
+            elif row.get(col) != value:
+                return False
+        return True
 
     def execute(self):
         rows = self._db.tables.setdefault(self._table, [])
@@ -164,10 +178,19 @@ class FakeSupabase:
             "incidents": [],
             "incident_analyses": [],
             "audit_events": [],
+            "user_roles": [],
         }
+        # Stand-in for auth.users, reachable only via the Auth admin API.
+        self.auth_users: list[dict] = []
+        self.auth = SimpleNamespace(admin=SimpleNamespace(list_users=self._list_users))
         self.fail_tables: dict[str, Exception] = {}
         self._lock = threading.Lock()
         self._audit_ids = itertools.count(1)
+
+    def _list_users(self, page: int | None = None, per_page: int | None = None):
+        page, per_page = page or 1, per_page or 50
+        chunk = self.auth_users[(page - 1) * per_page: page * per_page]
+        return [SimpleNamespace(**u) for u in chunk]
 
     def table(self, name: str) -> _Query:
         return _Query(self, name)

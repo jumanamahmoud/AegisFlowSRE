@@ -5,6 +5,15 @@ from unittest.mock import patch
 from tests.fakes import FakeSupabase
 
 
+@pytest.fixture(autouse=True)
+def _supabase_url_default(monkeypatch):
+    """The token verifier needs a project URL; tests must not depend on .env."""
+    import os
+
+    if not (os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")):
+        monkeypatch.setenv("SUPABASE_URL", "https://test-project.supabase.co")
+
+
 @pytest.fixture
 def neo4j_env(monkeypatch):
     """Set all three Neo4j env vars, and clear the optional CA bundle so a
@@ -68,6 +77,8 @@ def make_pipeline_state(
         "llm_response": llm_reasoning or "",
         "llm_meta": meta,
         "trace": [
+            {"event_type": "alert.sanitized", "payload": {"redacted_total": 0, "suspected_injection": False},
+             "occurred_at": _now()},
             {"event_type": "graph.enriched", "payload": {"dependency_count": 1},
              "occurred_at": _now()},
             {"event_type": "triage.completed", "payload": jev,

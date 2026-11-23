@@ -273,7 +273,19 @@ def get_jev_client() -> TypeSafeClient:
             "TYPESAFE_API_KEY is not set. "
             "Add it to your .env file or set it as an environment variable."
         )
-    return TypeSafeClient(model=JEV_MODEL)
+    # Retries transient failures (timeouts, connection errors, 429/5xx) with
+    # exponential backoff; JEV_TIMEOUT_S bounds each attempt.
+    from typesafe_sdk import RetryPolicy
+
+    timeout = float(os.environ.get("JEV_TIMEOUT_S", "10"))
+    retry = RetryPolicy(
+        max_retries=int(os.environ.get("JEV_MAX_RETRIES", "3")),
+        backoff_initial=0.5,
+        backoff_max=4.0,
+        http_statuses={408, 429, 500, 502, 503, 504},
+        timeout=timeout,
+    )
+    return TypeSafeClient(model=JEV_MODEL, retry=retry, timeout=timeout)
 
 
 # ---------------------------------------------------------------------------

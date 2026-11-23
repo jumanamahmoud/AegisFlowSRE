@@ -27,9 +27,17 @@ ANALYSES = "incident_analyses"
 AUDIT_EVENTS = "audit_events"
 CHANGE_STATUS_FN = "change_incident_status"
 
+# incidents.analysis_status values (see week2 migration)
+ANALYSIS_IDLE = ("none", "completed", "failed")
+ANALYSIS_PENDING = ("queued", "running")
+
 
 class IncidentNotFoundError(LookupError):
     pass
+
+
+class AnalysisAlreadyPendingError(RuntimeError):
+    """An analysis for this incident is already queued or running."""
 
 
 class ConcurrentUpdateError(RuntimeError):
@@ -224,3 +232,65 @@ class IncidentStore:
             .execute()
             .data
         )
+
+    # ------------------------------------------------------------------
+    # Background analysis status
+    # ------------------------------------------------------------------
+
+    def enqueue_analysis(self, incident_id: str, actor: str, request_id: str | None = None) -> dict:
+        """Mark an incident ``queued`` (compare-and-set) and record who asked.
+
+        Raises ``AnalysisAlreadyPendingError`` if a run is already queued or
+        running, so double-clicks can't start two analyses of one incident.
+        """
+        self.get_incident(incident_id)  # 404 for unknown ids
+        updated = (
+            self._sb.table(INCIDENTS)
+            .update({"analysis_status": "queued", "analysis_error": None,
+                     "analysis_updated_at": _now_iso()})
+            .eq("id", incident_id)
+            .in_("analysis_status", list(ANALYSIS_IDLE))
+            .execute()
+            .data
+        )
+        if not updated:
+            raise AnalysisAlreadyPendingError(f"Analysis already pending for incident {incident_id}")
+        self.append_event(
+            incident_id, AuditEventType.ANALYSIS_QUEUED, {"request_id": request_id}, actor=actor
+        )
+        return updated[0]
+
+    def mark_analysis_running(self, incident_id: str) -> bool:
+        """queued -> running. False if the job was already taken or cancelled."""
+        return bool(
+            self._sb.table(INCIDENTS)
+            .update({"analysis_status": "running", "analysis_updated_at": _now_iso()})
+            .eq("id", incident_id)
+            .eq("analysis_status", "queued")
+            .execute()
+            .data
+        )
+
+    def finish_analysis(self, incident_id: str, outcome: str, error: str | None = None) -> None:
+        assert outcome in ("completed", "failed")
+        self._sb.table(INCIDENTS).update(
+            {"analysis_status": outcome, "analysis_error": error, "analysis_updated_at": _now_iso()}
+        ).eq("id", incident_id).execute()
+
+    def pending_analyses(self) -> list[str]:
+        """Incidents left queued/running (e.g. by a restart), oldest first."""
+        rows = (
+            self._sb.table(INCIDENTS)
+            .select("id")
+            .in_("analysis_status", list(ANALYSIS_PENDING))
+            .order("analysis_updated_at")
+            .execute()
+            .data
+        )
+        return [r["id"] for r in rows]
+
+    def requeue_interrupted(self, incident_id: str) -> None:
+        """running -> queued for a job whose worker died with the old process."""
+        self._sb.table(INCIDENTS).update(
+            {"analysis_status": "queued", "analysis_updated_at": _now_iso()}
+        ).eq("id", incident_id).eq("analysis_status", "running").execute()

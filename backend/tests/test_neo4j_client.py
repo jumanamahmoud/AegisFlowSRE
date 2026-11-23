@@ -31,6 +31,7 @@ def test_init_reads_env_vars(neo4j_env, mock_neo4j_driver):
     mock_neo4j_driver.assert_called_once_with(
         "neo4j://localhost:7687",
         auth=("neo4j", "testpassword"),
+        **neo4j_client_module._DRIVER_TIMEOUTS,
     )
     client.close()
 

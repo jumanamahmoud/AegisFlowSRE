@@ -13,8 +13,38 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+import logging
+
 import neo4j
 from neo4j import GraphDatabase
+from neo4j.exceptions import ServiceUnavailable, SessionExpired, TransientError
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+logger = logging.getLogger(__name__)
+
+# Timeouts (seconds) so a hung Aura connection can't stall an analysis forever.
+_DRIVER_TIMEOUTS = {
+    "connection_timeout": float(os.environ.get("NEO4J_CONNECTION_TIMEOUT_S", "10")),
+    "connection_acquisition_timeout": float(os.environ.get("NEO4J_ACQUISITION_TIMEOUT_S", "15")),
+    "max_transaction_retry_time": 15.0,
+}
+
+# Read queries are idempotent, so transient network/cluster errors are retried
+# with exponential backoff. Writes are NOT retried (a repeated upsert would
+# close and re-create a dependency edge, polluting its history).
+_retry_reads = retry(
+    retry=retry_if_exception_type((ServiceUnavailable, SessionExpired, TransientError)),
+    stop=stop_after_attempt(int(os.environ.get("NEO4J_READ_ATTEMPTS", "3"))),
+    wait=wait_exponential(multiplier=0.5, max=4),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
 
 
 class Neo4jClient:
@@ -52,9 +82,10 @@ class Neo4jClient:
                 auth=(user, password),
                 encrypted=True,
                 trusted_certificates=neo4j.TrustCustomCAs(ca_bundle),
+                **_DRIVER_TIMEOUTS,
             )
         else:
-            self.driver = GraphDatabase.driver(uri, auth=(user, password))
+            self.driver = GraphDatabase.driver(uri, auth=(user, password), **_DRIVER_TIMEOUTS)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -142,6 +173,7 @@ class Neo4jClient:
                 protocol=protocol,
             )
 
+    @_retry_reads
     def get_blast_radius(
         self, failed_service_id: str, max_hops: int = 3
     ) -> list[dict]:
@@ -179,6 +211,7 @@ class Neo4jClient:
                 for record in result
             ]
 
+    @_retry_reads
     def get_service_context(self, service_id: str) -> list[dict]:
         """Return the direct active DEPENDS_ON neighbors of *service_id*.
 

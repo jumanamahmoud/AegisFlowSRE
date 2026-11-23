@@ -188,7 +188,7 @@ class TestAnalyzeAndRecord:
         assert len(fake_supabase.tables["incidents"]) == 1
         assert len(fake_supabase.tables["incident_analyses"]) == 1
         assert [e["event_type"] for e in fake_supabase.tables["audit_events"]] == [
-            "incident.created", "analysis.started", "graph.enriched",
+            "incident.created", "analysis.started", "alert.sanitized", "graph.enriched",
             "triage.completed", "ai.invoked", "analysis.saved",
         ]
 

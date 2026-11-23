@@ -68,7 +68,9 @@ class AuditEventType(str, Enum):
 
     INCIDENT_CREATED = "incident.created"
     STATUS_CHANGED = "incident.status_changed"
+    ANALYSIS_QUEUED = "analysis.queued"
     ANALYSIS_STARTED = "analysis.started"
+    ALERT_SANITIZED = "alert.sanitized"
     GRAPH_ENRICHED = "graph.enriched"
     TRIAGE_COMPLETED = "triage.completed"
     AI_INVOKED = "ai.invoked"
@@ -76,3 +78,4 @@ class AuditEventType(str, Enum):
     AI_FALLBACK = "ai.fallback"
     ANALYSIS_SAVED = "analysis.saved"
     ANALYSIS_FAILED = "analysis.failed"
+    USER_ROLE_CHANGED = "user.role_changed"

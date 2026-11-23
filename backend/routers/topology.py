@@ -3,13 +3,14 @@ backend/routers/topology.py
 ============================
 Topology ingestion router for AegisFlow.
 
-Exposes a single POST /ingest endpoint that records a service-to-external-system
+Exposes a single POST /ingest endpoint (administrators only — FR-32) that records a service-to-external-system
 dependency edge in Neo4j via the canonical Neo4jClient singleton.
 """
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from core.auth import Principal, Role, require_role
 from database.neo4j_client import get_neo4j_client, Neo4jClient
 
 
@@ -40,6 +41,7 @@ router = APIRouter(tags=["topology"])
 def ingest_topology(
     payload: TopologyIngestRequest,
     client: Neo4jClient = Depends(get_neo4j_client),
+    user: Principal = Depends(require_role(Role.ADMIN)),
 ) -> TopologyIngestResponse:
     """Record a bi-temporal DEPENDS_ON edge between a Service and an ExternalSystem.
 

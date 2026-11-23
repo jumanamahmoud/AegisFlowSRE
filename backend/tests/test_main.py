@@ -274,3 +274,152 @@ class TestLifespan:
         ):
             with TestClient(main.app) as client:
                 assert client.get("/health").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Week 2: queue lifecycle, CORS, request ids, structured logs
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _stub_queue():
+    """Lifespan starts/recovers/stops the analysis queue; keep it off the network."""
+    q = MagicMock()
+    q.recover.return_value = 0
+    with patch("main.get_analysis_queue", return_value=q):
+        yield q
+
+
+class TestQueueLifecycle:
+    def test_lifespan_recovers_then_shuts_down_queue(self, monkeypatch, _stub_queue):
+        from fastapi.testclient import TestClient
+
+        for k, v in ALL_ENV_VARS.items():
+            monkeypatch.setenv(k, v)
+        with (
+            patch("main.load_dotenv"),
+            patch("main.get_neo4j_client", return_value=MagicMock()),
+            patch("main.get_supabase", return_value=_stub_supabase()),
+        ):
+            with TestClient(main.app):
+                _stub_queue.recover.assert_called_once()
+                _stub_queue.shutdown.assert_not_called()
+        _stub_queue.shutdown.assert_called_once()
+
+    def test_recover_failure_does_not_block_startup(self, monkeypatch, _stub_queue):
+        from fastapi.testclient import TestClient
+
+        for k, v in ALL_ENV_VARS.items():
+            monkeypatch.setenv(k, v)
+        _stub_queue.recover.side_effect = RuntimeError("db blip")
+        with (
+            patch("main.load_dotenv"),
+            patch("main.get_neo4j_client", return_value=MagicMock()),
+            patch("main.get_supabase", return_value=_stub_supabase()),
+        ):
+            with TestClient(main.app) as client:
+                assert client.get("/health").status_code == 200
+
+
+def _health_client():
+    from fastapi.testclient import TestClient
+
+    return TestClient(main.app)
+
+
+@pytest.fixture
+def healthy():
+    with (
+        patch("main.get_neo4j_client", return_value=MagicMock()),
+        patch("main.get_supabase", return_value=_stub_supabase()),
+    ):
+        yield
+
+
+class TestCors:
+    def test_default_origin_is_dashboard_only(self, monkeypatch):
+        monkeypatch.delenv("CORS_ALLOW_ORIGINS", raising=False)
+        assert main._cors_origins() == ["http://localhost:3000"]
+
+    def test_wildcard_is_dropped(self, monkeypatch):
+        monkeypatch.setenv("CORS_ALLOW_ORIGINS", '["*", "https://app.example.com"]')
+        assert main._cors_origins() == ["https://app.example.com"]
+
+    def test_only_wildcard_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("CORS_ALLOW_ORIGINS", '["*"]')
+        assert main._cors_origins() == ["http://localhost:3000"]
+
+    def test_comma_separated_and_trailing_slash(self, monkeypatch):
+        monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://a.example.com/, https://b.example.com")
+        assert main._cors_origins() == ["https://a.example.com", "https://b.example.com"]
+
+    def test_dashboard_preflight_allowed(self, healthy):
+        resp = _health_client().options("/incidents/", headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        })
+        assert resp.status_code == 200
+        assert resp.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+    def test_other_site_preflight_refused(self, healthy):
+        resp = _health_client().options("/incidents/", headers={
+            "Origin": "https://evil.example.com",
+            "Access-Control-Request-Method": "POST",
+        })
+        assert resp.status_code == 400
+        assert "access-control-allow-origin" not in resp.headers
+
+    def test_other_site_simple_request_gets_no_cors_header(self, healthy):
+        resp = _health_client().get("/health", headers={"Origin": "https://evil.example.com"})
+        assert "access-control-allow-origin" not in resp.headers
+
+
+class TestRequestIdAndLogs:
+    def test_request_id_generated_and_returned(self, healthy):
+        resp = _health_client().get("/health")
+        assert len(resp.headers["x-request-id"]) == 32
+
+    def test_safe_incoming_request_id_reused(self, healthy):
+        resp = _health_client().get("/health", headers={"X-Request-ID": "abc-123"})
+        assert resp.headers["x-request-id"] == "abc-123"
+
+    def test_unsafe_incoming_request_id_replaced(self, healthy):
+        resp = _health_client().get("/health", headers={"X-Request-ID": "bad id\nwith injection"})
+        assert resp.headers["x-request-id"] != "bad id\nwith injection"
+        assert len(resp.headers["x-request-id"]) == 32
+
+    def test_access_log_is_structured(self, healthy, caplog):
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="aegisflow"):
+            resp = _health_client().get("/health", headers={"X-Request-ID": "trace-me"})
+        record = next(r for r in caplog.records if r.getMessage() == "request")
+        assert record.path == "/health" and record.status == 200 and record.method == "GET"
+        assert isinstance(record.duration_ms, float)
+        assert resp.headers["x-request-id"] == "trace-me"
+
+    def test_unauthenticated_api_call_rejected_through_full_app(self, healthy):
+        resp = _health_client().get("/incidents/00000000-0000-0000-0000-000000000001")
+        assert resp.status_code == 401
+
+
+class TestJsonFormatter:
+    def test_json_line_has_context_and_extras(self):
+        import json
+        import logging
+
+        from core.logging import JsonFormatter, _ContextFilter, request_id_var
+
+        token = request_id_var.set("rid-1")
+        try:
+            record = logging.makeLogRecord({"name": "t", "levelname": "INFO", "msg": "hello %s",
+                                            "args": ("world",), "incident_id": "inc-9"})
+            _ContextFilter().filter(record)
+            entry = json.loads(JsonFormatter().format(record))
+        finally:
+            request_id_var.reset(token)
+        assert entry["msg"] == "hello world"
+        assert entry["request_id"] == "rid-1"
+        assert entry["incident_id"] == "inc-9"
+        assert entry["level"] == "INFO" and entry["ts"]

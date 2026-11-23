@@ -277,7 +277,9 @@ class TestLlmReason:
         pipeline.llm_reason(state)
 
         call_args = mock_groq_instance.chat.completions.create.call_args
-        prompt_text = call_args[1]["messages"][0]["content"]
+        messages = call_args[1]["messages"]
+        assert messages[0]["role"] == "system"
+        prompt_text = messages[1]["content"]
 
         assert "DB timeout in production" in prompt_text
         assert "database" in prompt_text
@@ -581,7 +583,7 @@ class TestExecutePipeline:
     def test_full_llm_path_state(self, monkeypatch):
         _, state, groq = self._run(monkeypatch, severity=3.0, noul=0.9)
         assert [e["event_type"] for e in state["trace"]] == [
-            "graph.enriched", "triage.completed", "ai.invoked",
+            "alert.sanitized", "graph.enriched", "triage.completed", "ai.invoked",
         ]
         assert state["llm_meta"]["analysis_source"] == "llm"
         assert state["final_response"]["llm_reasoning"] == "Root cause: X"
@@ -591,7 +593,7 @@ class TestExecutePipeline:
     def test_short_circuit_path_state(self, monkeypatch):
         _, state, groq = self._run(monkeypatch, severity=0.2, noul=0.1)
         assert [e["event_type"] for e in state["trace"]] == [
-            "graph.enriched", "triage.completed", "ai.skipped",
+            "alert.sanitized", "graph.enriched", "triage.completed", "ai.skipped",
         ]
         assert state["llm_meta"]["analysis_source"] == "skipped"
         assert state["final_response"]["llm_reasoning"] is None
@@ -652,5 +654,5 @@ class TestOutputLimit:
         groq.chat.completions.create.return_value = self._completion("stop")
         pipeline = _pipeline_with_groq(monkeypatch, groq)
         pipeline.llm_reason(_base_state(trace=[]))
-        prompt = groq.chat.completions.create.call_args.kwargs["messages"][0]["content"]
+        prompt = groq.chat.completions.create.call_args.kwargs["messages"][1]["content"]
         assert "under 350 words" in prompt
