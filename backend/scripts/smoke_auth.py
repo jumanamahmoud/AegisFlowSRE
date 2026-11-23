@@ -50,11 +50,12 @@ def main() -> None:
         me = c.get("/auth/me", headers=good)
         role = me.json().get("role") if me.status_code == 200 else None
         check("real token accepted (/auth/me)", me.status_code == 200, f"{me.status_code}, role={role}")
-        r = c.get("/incidents/", headers=good)
-        check("logged-in user can list incidents", r.status_code == 200, str(r.status_code))
-        r = c.get("/incidents/")
+        probe = "/incidents/00000000-0000-0000-0000-000000000000"  # unknown id: 404 means "got past login"
+        r = c.get(probe, headers=good)
+        check("logged-in user reaches incidents API", r.status_code == 404, f"{r.status_code} (404 = authorised, not found)")
+        r = c.get(probe)
         check("no token rejected", r.status_code == 401, str(r.status_code))
-        r = c.get("/incidents/", headers=tampered)
+        r = c.get(probe, headers=tampered)
         check("tampered token rejected", r.status_code == 401, str(r.status_code))
         r = c.get("/admin/users", headers=good)
         expect = 200 if role == "admin" else 403
