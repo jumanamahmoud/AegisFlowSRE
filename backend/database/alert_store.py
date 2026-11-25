@@ -17,7 +17,7 @@ from services.alert_sources import NormalizedAlert
 ALERTS = "alerts"
 WINDOWS = "maintenance_windows"
 
-DISPOSITIONS = ("received", "created", "deduplicated", "suppressed", "resolved", "ignored")
+DISPOSITIONS = ("received", "created", "deduplicated", "grouped", "suppressed", "resolved", "ignored")
 
 
 class AlertNotFoundError(LookupError):
@@ -92,16 +92,32 @@ class AlertStore:
         disposition: str,
         incident_id: str | None = None,
         maintenance_window_id: str | None = None,
+        grouped_via: dict | None = None,
     ) -> None:
         assert disposition in DISPOSITIONS and disposition != "received"
-        self._sb.table(ALERTS).update(
-            {
-                "disposition": disposition,
-                "incident_id": incident_id,
-                "maintenance_window_id": maintenance_window_id,
-                "processed_at": utc_iso(),
-            }
-        ).eq("id", alert_id).execute()
+        changes = {
+            "disposition": disposition,
+            "incident_id": incident_id,
+            "maintenance_window_id": maintenance_window_id,
+            "processed_at": utc_iso(),
+        }
+        if grouped_via is not None:
+            changes["grouped_via"] = grouped_via
+        self._sb.table(ALERTS).update(changes).eq("id", alert_id).execute()
+
+    def latest_grouped_incident_id(self, fingerprint: str) -> str | None:
+        """The incident the most recent copy of this alert was grouped into."""
+        rows = (
+            self._sb.table(ALERTS)
+            .select("incident_id")
+            .eq("fingerprint", fingerprint)
+            .eq("disposition", "grouped")
+            .order("received_at", desc=True)
+            .limit(1)
+            .execute()
+            .data
+        )
+        return rows[0]["incident_id"] if rows and rows[0].get("incident_id") else None
 
     def get_alert(self, alert_id: str) -> dict:
         if not _is_uuid(alert_id):

@@ -540,6 +540,8 @@ class TestPipelineTrace:
         assert event["event_type"] == "triage.completed"
         assert event["payload"] == {
             "incident_category": "network", "severity_score": 1, "escalation_noul": 0.3,
+            "category_confidence": None, "severity_confidence": None,  # mock reports none
+            "decision": "severity 1 < 2 and escalation 0.30 < 0.5",
         }
 
     def test_emit_response_marks_short_circuit_as_skipped(self, monkeypatch):

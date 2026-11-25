@@ -15,7 +15,7 @@ import pytest
 
 from database.alert_store import AlertStore
 from database.incident_store import IncidentStore
-from services.alert_intake import AlertIntake
+from services.alert_intake import AlertIntake, GroupingSettings
 from services.alert_sources import manual_alert
 from services.analysis_queue import AnalysisQueue
 from tests.conftest import make_pipeline_state
@@ -36,7 +36,9 @@ def queue(db):
 
 @pytest.fixture
 def intake(db, queue):
-    return AlertIntake(IncidentStore(db), AlertStore(db), queue, auto_analyze=True)
+    # Grouping (Phase 4) is tested in test_grouping.py; here each alert stands alone.
+    return AlertIntake(IncidentStore(db), AlertStore(db), queue, auto_analyze=True,
+                       grouping=GroupingSettings(enabled=False))
 
 
 def alert(title="DB down", service="payment-service", **kw):
@@ -67,7 +69,8 @@ class TestNewIncident:
         assert all(e["actor"] == ACTOR for e in events(db, inc["id"])[:3])
 
     def test_auto_analyze_off(self, db, queue):
-        intake = AlertIntake(IncidentStore(db), AlertStore(db), queue, auto_analyze=False)
+        intake = AlertIntake(IncidentStore(db), AlertStore(db), queue, auto_analyze=False,
+                         grouping=GroupingSettings(enabled=False))
         [r] = intake.receive([alert()], ACTOR)
         assert r.disposition == "created" and not r.analysis_queued
         assert db.tables["incidents"][0]["analysis_status"] == "none"

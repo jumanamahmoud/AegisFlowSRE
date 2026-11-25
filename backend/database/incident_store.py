@@ -50,6 +50,14 @@ class DuplicateActiveIncidentError(RuntimeError):
     (the ``incidents_active_fingerprint_uidx`` unique index fired)."""
 
 
+class ReviewNotPendingError(RuntimeError):
+    """The incident is not waiting for a human review."""
+
+
+def _cause_distance(cause: dict) -> int:
+    return int(cause.get("hops_a", 99)) + int(cause.get("hops_b", 99))
+
+
 def is_unique_violation(exc: Exception) -> bool:
     """True for Postgres error 23505 as surfaced by PostgREST / supabase-py."""
     return getattr(exc, "code", None) == "23505" or "23505" in str(exc)
@@ -176,6 +184,69 @@ class IncidentStore:
         )
         return rows[0] if rows else None
 
+    def recent_active_incidents(self, since_iso: str, limit: int = 50) -> list[dict]:
+        """Active incidents opened at or after ``since_iso``, newest first —
+        the candidates a new alert may be grouped into (FR-13)."""
+        return (
+            self._sb.table(INCIDENTS)
+            .select("*")
+            .in_("status", [s.value for s in ACTIVE_STATUSES])
+            .gte("created_at", since_iso)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+            .data
+        )
+
+    def add_grouped_service(self, incident: dict, service_id: str, cause: dict | None) -> dict:
+        """Record that ``service_id``'s alert joined ``incident``, and keep the
+        closest shared component seen so far as its probable cause."""
+        changes: dict[str, Any] = {}
+        grouped = list(incident.get("grouped_services") or [])
+        if service_id != incident["service_id"] and service_id not in grouped:
+            changes["grouped_services"] = grouped + [service_id]
+        current = incident.get("probable_cause")
+        if cause and (not current or _cause_distance(cause) < _cause_distance(current)):
+            changes["probable_cause"] = cause
+        if not changes:
+            return incident
+        rows = self._sb.table(INCIDENTS).update(changes).eq("id", incident["id"]).execute().data
+        return rows[0] if rows else {**incident, **changes}
+
+    def list_incidents(
+        self,
+        *,
+        status: str | None = None,
+        needs_review: bool | None = None,
+        service_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        q = self._sb.table(INCIDENTS).select("*")
+        if status is not None:
+            q = q.eq("status", status)
+        if needs_review is not None:
+            q = q.eq("needs_review", needs_review)
+        if service_id is not None:
+            q = q.eq("service_id", service_id)
+        return q.order("created_at", desc=True).limit(limit).execute().data
+
+    def complete_review(self, incident_id: str, actor: str, note: str | None = None) -> dict:
+        """Clear the needs-review flag (FR-14). Raises ``ReviewNotPendingError``
+        if no review is pending (compare-and-set, so two reviewers can't both)."""
+        self.get_incident(incident_id)
+        rows = (
+            self._sb.table(INCIDENTS)
+            .update({"needs_review": False, "reviewed_at": _now_iso(), "reviewed_by": actor})
+            .eq("id", incident_id)
+            .eq("needs_review", True)
+            .execute()
+            .data
+        )
+        if not rows:
+            raise ReviewNotPendingError(incident_id)
+        self.append_event(incident_id, AuditEventType.TRIAGE_REVIEWED, {"note": note}, actor=actor)
+        return rows[0]
+
     def get_incident(self, incident_id: str) -> dict:
         # incidents.id is a Postgres uuid: a malformed value would make the
         # query itself fail (22P02 -> HTTP 500). It can't match any row, so
@@ -248,19 +319,22 @@ class IncidentStore:
     # ------------------------------------------------------------------
 
     def save_analysis(self, incident_id: str, record: dict) -> dict:
-        """Persist one analysis and copy its classification onto the incident."""
+        """Persist one analysis and copy its classification onto the incident.
+
+        An uncertain triage (FR-14) also flags the incident for human review;
+        a later confident analysis never clears a pending review by itself.
+        """
         saved = (
             self._sb.table(ANALYSES)
             .insert({"incident_id": incident_id, **record})
             .execute()
             .data[0]
         )
-        self._sb.table(INCIDENTS).update(
-            {
-                "incident_category": record["incident_category"],
-                "severity": record["severity"],
-            }
-        ).eq("id", incident_id).execute()
+        changes = {"incident_category": record["incident_category"], "severity": record["severity"]}
+        if record.get("needs_review"):
+            changes.update(needs_review=True, review_reasons=record.get("review_reasons") or [],
+                           reviewed_at=None, reviewed_by=None)
+        self._sb.table(INCIDENTS).update(changes).eq("id", incident_id).execute()
         return saved
 
     def list_analyses(self, incident_id: str) -> list[dict]:

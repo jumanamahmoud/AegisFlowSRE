@@ -1,0 +1,145 @@
+{
+  "description": "20 labelled sample alerts for calibrating triage thresholds (Phase 4). expected_severity: 0 Low, 1 Moderate, 2 High, 3 Critical. Labels are a responder's judgement; review and adjust them with the supervisor.",
+  "alerts": [
+    {
+      "id": "cal-01",
+      "service_id": "payment-service",
+      "alert": "payment-service: 100% of requests failing with HTTP 503 for 6 minutes. All checkout attempts are rejected. No payments have succeeded since 09:12 UTC.",
+      "expected_category": "application",
+      "expected_severity": 3
+    },
+    {
+      "id": "cal-02",
+      "service_id": "payment-service",
+      "alert": "payment-db: connection pool exhausted (100/100 in use) for 5 minutes. Queries time out after 30s; payment-service error rate 64%.",
+      "expected_category": "database",
+      "expected_severity": 3
+    },
+    {
+      "id": "cal-03",
+      "service_id": "api-gateway",
+      "alert": "api-gateway: unusual traffic spike, 40x normal requests per second from 3,000 IP addresses, mostly to /login. Latency p99 above 8s for all users.",
+      "expected_category": "security",
+      "expected_severity": 3
+    },
+    {
+      "id": "cal-04",
+      "service_id": "fraud-service",
+      "alert": "fraud-service: 23 failed admin logins followed by a successful login from an unknown country; new API token created 2 minutes later.",
+      "expected_category": "security",
+      "expected_severity": 3
+    },
+    {
+      "id": "cal-05",
+      "service_id": "order-service",
+      "alert": "order-service: EC2 host i-0a12 in eu-west-1a unreachable; 2 of 3 instances down. Remaining instance at 97% CPU, 18% of orders failing.",
+      "expected_category": "infrastructure",
+      "expected_severity": 3
+    },
+    {
+      "id": "cal-06",
+      "service_id": "checkout-service",
+      "alert": "checkout-service: HTTP 5xx rate 7.4% over 10 minutes after deploy v2.31.0 (previous 0.2%). Errors are NullPointerException in CartTotals.",
+      "expected_category": "application",
+      "expected_severity": 2
+    },
+    {
+      "id": "cal-07",
+      "service_id": "payment-service",
+      "alert": "Stripe API: 12% of charge requests returning 502 from api.stripe.com for 8 minutes. Our retries are succeeding for most customers.",
+      "expected_category": "dependency",
+      "expected_severity": 2
+    },
+    {
+      "id": "cal-08",
+      "service_id": "payment-service",
+      "alert": "redis-cache: evictions 4,000/s and memory at 99%. Session lookups slow (p95 1.8s); some users logged out.",
+      "expected_category": "infrastructure",
+      "expected_severity": 2
+    },
+    {
+      "id": "cal-09",
+      "service_id": "order-service",
+      "alert": "orders-db: replication lag on read replica 340 seconds and growing. Order history pages show stale data.",
+      "expected_category": "database",
+      "expected_severity": 2
+    },
+    {
+      "id": "cal-10",
+      "service_id": "notification-service",
+      "alert": "notification-service: email provider SendGrid returning 429 Too Many Requests; 2,300 order confirmation emails queued, oldest 25 minutes.",
+      "expected_category": "dependency",
+      "expected_severity": 2
+    },
+    {
+      "id": "cal-11",
+      "service_id": "checkout-service",
+      "alert": "checkout-service: p95 latency 950ms (target 800ms) for 15 minutes. Error rate normal at 0.1%.",
+      "expected_category": "application",
+      "expected_severity": 1
+    },
+    {
+      "id": "cal-12",
+      "service_id": "order-service",
+      "alert": "order-service: disk usage 82% on /var/log of order-service-2. Growing about 1% per day.",
+      "expected_category": "infrastructure",
+      "expected_severity": 1
+    },
+    {
+      "id": "cal-13",
+      "service_id": "fraud-service",
+      "alert": "fraud-service: model scoring job finished 20 minutes late. Scores served from yesterday's model in the meantime.",
+      "expected_category": "application",
+      "expected_severity": 1
+    },
+    {
+      "id": "cal-14",
+      "service_id": "payment-service",
+      "alert": "payment-db: 3 slow queries over 2s in the last hour (SELECT on refunds table). No user-facing errors.",
+      "expected_category": "database",
+      "expected_severity": 1
+    },
+    {
+      "id": "cal-15",
+      "service_id": "api-gateway",
+      "alert": "api-gateway: TLS certificate for api.example.com expires in 21 days.",
+      "expected_category": "infrastructure",
+      "expected_severity": 1
+    },
+    {
+      "id": "cal-16",
+      "service_id": "notification-service",
+      "alert": "notification-service: one pod restarted (OOMKilled) and recovered within 30 seconds. No messages lost.",
+      "expected_category": "infrastructure",
+      "expected_severity": 0
+    },
+    {
+      "id": "cal-17",
+      "service_id": "checkout-service",
+      "alert": "checkout-service: feature flag 'new-coupon-ui' toggled off by release bot. Informational.",
+      "expected_category": "application",
+      "expected_severity": 0
+    },
+    {
+      "id": "cal-18",
+      "service_id": "order-service",
+      "alert": "order-service: nightly backup completed in 47 minutes (usual 40). Backup verified OK.",
+      "expected_category": "database",
+      "expected_severity": 0
+    },
+    {
+      "id": "cal-19",
+      "service_id": "fraud-service",
+      "alert": "fraud-service: something looks off with the numbers today, please check.",
+      "expected_category": "unknown",
+      "expected_severity": 1
+    },
+    {
+      "id": "cal-20",
+      "service_id": "payment-service",
+      "alert": "Synthetic check 'pay-flow-7' status changed to WARN. Code 0x3F.",
+      "expected_category": "unknown",
+      "expected_severity": 0
+    }
+  ]
+}

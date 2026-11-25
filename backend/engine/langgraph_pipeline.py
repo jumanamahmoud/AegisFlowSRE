@@ -120,75 +120,69 @@ def enrich_with_graph(state: IncidentState) -> dict:
 # ---------------------------------------------------------------------------
 
 def jev_gate(state: IncidentState) -> dict:
-    """Node 2 — Run the Jev deterministic gate.
+    """Node 2 — Run the Jev deterministic gate (System 1) and apply the
+    triage rule (engine/triage_policy.py).
 
-    Calls ``get_jev_client()`` and invokes ``client.system_one`` with the
-    standard QUESTIONS dict (Choice/Score/Noul) defined in jev_check.py.
+    Stores in ``jev_results``: incident_category, severity_score (0-3),
+    escalation_noul (0-1), category_confidence, severity_confidence, and the
+    rule's verdict: run_ai, needs_review, review_reasons.
 
-    Stores three values in ``jev_results``:
-      - incident_category : str   (from Choice response)
-      - severity_score    : int   (0-3, rounded from Score response)
-      - escalation_noul   : float (0.0-1.0, from Noul response)
+    When triage is uncertain (FR-14) a ``triage.review_requested`` event is
+    added and the AI analysis is NOT skipped, so a human reviews it with an
+    analysis in hand.
 
     Any Jev API exception is propagated to the caller without being swallowed.
 
-    Requirements: 8.1, 8.2, 8.5
+    Requirements: 8.1, 8.2, 8.5; FR-14
     """
     logger.info("pipeline: running Jev triage")
-    from engine.jev_check import get_jev_client, QUESTIONS  # deferred import
+    from engine.jev_check import classify  # deferred import
+    from engine.triage_policy import TriagePolicy
 
-    client = get_jev_client()
-    try:
-        response = client.system_one(
-            state={
-                "alert": state["alert"],
-                "system": {"name": state["service_id"]},
-            },
-            questions=QUESTIONS,
-        )
-    finally:
-        client.close()
-
-    incident_category: str = response.choices["incident_category"].choice
-    severity_score: int = round(response.scores["severity"].score)
-    escalation_noul: float = response.nouls["needs_escalation"].noul
+    jev = classify(state["alert"], state["service_id"])
+    decision = TriagePolicy.from_env().decide(jev)
+    jev_results = {
+        **jev,
+        "run_ai": decision.run_ai,
+        "needs_review": decision.needs_review,
+        "review_reasons": decision.reasons,
+    }
 
     logger.info(
         "pipeline: triage completed",
-        extra={"category": incident_category, "severity_score": severity_score,
-               "escalation_noul": round(escalation_noul, 4)},
+        extra={"category": jev["incident_category"], "severity_score": jev["severity_score"],
+               "escalation_noul": round(jev["escalation_noul"], 4),
+               "needs_review": decision.needs_review},
     )
-
-    jev_results = {
-        "incident_category": incident_category,
-        "severity_score": severity_score,
-        "escalation_noul": escalation_noul,
-    }
-    return {
-        "jev_results": jev_results,
-        "trace": _trace(state, "triage.completed", jev_results),
-    }
+    trace = _trace(state, "triage.completed", {**jev, "decision": decision.explanation})
+    if decision.needs_review:
+        logger.warning("pipeline: triage uncertain, human review requested",
+                       extra={"reasons": decision.reasons})
+        trace = _trace({"trace": trace}, "triage.review_requested",
+                       {"reasons": decision.reasons, **{k: jev.get(k) for k in (
+                           "incident_category", "category_confidence", "severity_confidence")}})
+    return {"jev_results": jev_results, "trace": trace}
 
 
 def route_after_jev(state: IncidentState) -> str:
     """Conditional routing function after the jev_gate node.
 
-    Pure function — reads ``jev_results`` and returns the name of the next
-    node to execute with no side effects.
+    Pure function — applies the triage rule (engine/triage_policy.py) to
+    ``jev_results`` and returns the name of the next node.
 
     Returns
     -------
     "emit_response"
-        When ``severity_score < 2 AND escalation_noul < 0.5`` (short-circuit).
+        Low risk (severity_score < 2 AND escalation_noul < 0.5 by default)
+        and triage is confident: System 2 is skipped (FR-6).
     "llm_reason"
-        When ``severity_score >= 2 OR escalation_noul >= 0.5``.
+        Serious, or uncertain and therefore going to a human (FR-14).
 
-    Requirements: 8.3, 8.4
+    Requirements: 8.3, 8.4; FR-14
     """
-    r = state["jev_results"]
-    if r["severity_score"] < 2 and r["escalation_noul"] < 0.5:
-        return "emit_response"
-    return "llm_reason"
+    from engine.triage_policy import TriagePolicy
+
+    return "llm_reason" if TriagePolicy.from_env().decide(state["jev_results"]).run_ai else "emit_response"
 
 
 # ---------------------------------------------------------------------------
@@ -444,16 +438,20 @@ def emit_response(state: IncidentState) -> dict:
         "needs_escalation": needs_escalation,
         "llm_reasoning": llm_reasoning,
         "blast_radius": blast_radius,
+        "needs_review": bool(jev_results.get("needs_review")),
+        "review_reasons": list(jev_results.get("review_reasons") or []),
     }
 
     result: dict = {"final_response": final_response}
     if not llm_response:
         # Short-circuit path: System 2 was deliberately not run (FR-6).
         result["llm_meta"] = {"analysis_source": "skipped", "model_name": None}
+        from engine.triage_policy import TriagePolicy
+
         result["trace"] = _trace(
             state,
             "ai.skipped",
-            {"reason": "severity_score < 2 and escalation_noul < 0.5"},
+            {"reason": TriagePolicy.from_env().decide(jev_results).explanation},
         )
     return result
 

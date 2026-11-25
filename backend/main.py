@@ -37,8 +37,10 @@ from database.neo4j_client import get_neo4j_client
 from database.supabase_client import get_supabase, supabase_secret_key, supabase_url
 from routers.admin import admin_router, auth_router
 from routers.alerts import get_alert_intake as _alert_intake_dependency
+from routers.alerts import get_service_map as _service_map_dependency
 from routers.alerts import router as alerts_router
 from routers.maintenance import router as maintenance_router
+from routers.services import router as services_router
 from routers.topology import router as topology_router
 from routers.incidents import router as incidents_router
 from services.analysis_queue import get_analysis_queue
@@ -123,7 +125,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 6. Process alerts that were stored but never processed (no alert is lost)
     try:
-        _alert_intake_dependency(get_supabase(), queue).recover()
+        _alert_intake_dependency(get_supabase(), queue, _service_map_dependency()).recover()
     except Exception:
         logger.exception("could not recover unprocessed alerts")
 
@@ -226,6 +228,7 @@ app.include_router(auth_router, prefix="/auth")
 app.include_router(admin_router, prefix="/admin")
 app.include_router(alerts_router, prefix="/alerts")
 app.include_router(maintenance_router, prefix="/maintenance-windows")
+app.include_router(services_router, prefix="/services")
 
 # ---------------------------------------------------------------------------
 # Health endpoint
