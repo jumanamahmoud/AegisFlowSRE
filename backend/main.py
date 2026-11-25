@@ -8,7 +8,8 @@ Wires together:
 - Lifespan: startup validation, background analysis queue start/resume, shutdown
 - Request-id + access-log middleware
 - CORS restricted to the dashboard origin(s)
-- Routers: incidents, topology, auth/admin (all require login — FR-32)
+- Routers: incidents, topology, auth/admin (all require login — FR-32),
+  alerts (webhooks use machine API keys) and maintenance windows
 - GET /health endpoint (public: it reveals only up/down)
 
 Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 6.6, 6.7
@@ -35,6 +36,9 @@ from core.logging import configure_logging, request_id_var
 from database.neo4j_client import get_neo4j_client
 from database.supabase_client import get_supabase, supabase_secret_key, supabase_url
 from routers.admin import admin_router, auth_router
+from routers.alerts import get_alert_intake as _alert_intake_dependency
+from routers.alerts import router as alerts_router
+from routers.maintenance import router as maintenance_router
 from routers.topology import router as topology_router
 from routers.incidents import router as incidents_router
 from services.analysis_queue import get_analysis_queue
@@ -117,10 +121,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.exception("could not resume pending analyses")
 
+    # 6. Process alerts that were stored but never processed (no alert is lost)
+    try:
+        _alert_intake_dependency(get_supabase(), queue).recover()
+    except Exception:
+        logger.exception("could not recover unprocessed alerts")
+
     # --- yield: application serves traffic ---
     yield
 
-    # 6. Shutdown: stop the queue (unstarted jobs stay 'queued' in the DB),
+    # 7. Shutdown: stop the queue (unstarted jobs stay 'queued' in the DB),
     #    then close the Neo4j driver pool
     queue.shutdown()
     get_neo4j_client().close()
@@ -214,6 +224,8 @@ app.include_router(topology_router, prefix="/topology")
 app.include_router(incidents_router, prefix="/incidents")
 app.include_router(auth_router, prefix="/auth")
 app.include_router(admin_router, prefix="/admin")
+app.include_router(alerts_router, prefix="/alerts")
+app.include_router(maintenance_router, prefix="/maintenance-windows")
 
 # ---------------------------------------------------------------------------
 # Health endpoint

@@ -1,0 +1,12 @@
+{
+  "Type": "Notification",
+  "MessageId": "6f3c1a52-0d1e-5b9b-9a3e-2c4d1e0f7a11",
+  "TopicArn": "arn:aws:sns:eu-west-1:123456789012:aegisflow-alarms",
+  "Subject": "ALARM: \"auth-service-high-cpu\" in EU (Ireland)",
+  "Message": "{\"AlarmName\":\"auth-service-high-cpu\",\"AlarmDescription\":\"CPU above 90% on auth-service\",\"AWSAccountId\":\"123456789012\",\"NewStateValue\":\"ALARM\",\"NewStateReason\":\"Threshold Crossed: 3 datapoints [96.1, 94.8, 97.3] were greater than the threshold (90.0).\",\"StateChangeTime\":\"2026-11-24T09:16:02.123+0000\",\"Region\":\"EU (Ireland)\",\"AlarmArn\":\"arn:aws:cloudwatch:eu-west-1:123456789012:alarm:auth-service-high-cpu\",\"OldStateValue\":\"OK\",\"Trigger\":{\"MetricName\":\"CPUUtilization\",\"Namespace\":\"AWS/ECS\",\"StatisticType\":\"Statistic\",\"Statistic\":\"AVERAGE\",\"Period\":60,\"EvaluationPeriods\":3,\"ComparisonOperator\":\"GreaterThanThreshold\",\"Threshold\":90.0,\"Dimensions\":[{\"value\":\"prod-cluster\",\"name\":\"ClusterName\"},{\"value\":\"auth-service\",\"name\":\"ServiceName\"}]}}",
+  "Timestamp": "2026-11-24T09:16:02.180Z",
+  "SignatureVersion": "1",
+  "Signature": "EXAMPLE",
+  "SigningCertURL": "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-0000000000000000000000.pem",
+  "UnsubscribeURL": "https://sns.eu-west-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-west-1:123456789012:aegisflow-alarms:0000"
+}

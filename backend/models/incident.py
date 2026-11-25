@@ -79,3 +79,21 @@ class AuditEventType(str, Enum):
     ANALYSIS_SAVED = "analysis.saved"
     ANALYSIS_FAILED = "analysis.failed"
     USER_ROLE_CHANGED = "user.role_changed"
+    # Week 3 — alert intake
+    ALERT_RECEIVED = "alert.received"
+    ALERT_DEDUPLICATED = "alert.deduplicated"
+    ALERT_SUPPRESSED = "alert.suppressed"
+    ALERT_RESOLVED_AT_SOURCE = "alert.resolved_at_source"
+    MAINTENANCE_SCHEDULED = "maintenance.scheduled"
+    MAINTENANCE_CANCELLED = "maintenance.cancelled"
+    API_KEY_CREATED = "api_key.created"
+    API_KEY_REVOKED = "api_key.revoked"
+    INTEGRATION_CONFIRMED = "integration.subscription_confirmed"
+
+
+#: Statuses in which an incident still "owns" its alert fingerprint: a repeat
+#: of the alert is attached to it instead of opening a new incident (FR-3).
+#: Mirrors the partial unique index in the Week 3 migration.
+ACTIVE_STATUSES: frozenset[IncidentStatus] = frozenset(
+    {IncidentStatus.OPEN, IncidentStatus.ACKNOWLEDGED, IncidentStatus.MITIGATING}
+)

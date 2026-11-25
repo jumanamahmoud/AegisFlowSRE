@@ -1,0 +1,31 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"PaymentDBConnectionPoolExhausted\"}",
+  "truncatedAlerts": 0,
+  "status": "firing",
+  "receiver": "aegisflow",
+  "groupLabels": {"alertname": "PaymentDBConnectionPoolExhausted"},
+  "commonLabels": {"alertname": "PaymentDBConnectionPoolExhausted", "env": "prod", "severity": "critical"},
+  "commonAnnotations": {"summary": "payment-db connection pool exhausted"},
+  "externalURL": "http://alertmanager.example.internal:9093",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "PaymentDBConnectionPoolExhausted",
+        "service": "payment-service",
+        "instance": "payment-service-7d9f:8080",
+        "env": "prod",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "payment-db connection pool exhausted",
+        "description": "98% of connections to payment-db in use for 5 minutes; requests are timing out."
+      },
+      "startsAt": "2026-11-24T09:12:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus.example.internal:9090/graph?g0.expr=pool_in_use_ratio",
+      "fingerprint": "c3a1f0e9b2d47a55"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "7714356823117264598",
+  "alert_id": "148829331",
+  "title": "[Triggered on {service:inventory-service}] Inventory API p99 latency above 2s",
+  "message": "p99 latency of inventory-service has been above 2s for 10 minutes. @webhook-aegisflow",
+  "transition": "Triggered",
+  "priority": "P2",
+  "alert_type": "error",
+  "tags": "env:prod,service:inventory-service,team:fulfilment",
+  "aggregate": "f1e8c3a9d2b7",
+  "hostname": "inventory-api-2",
+  "link": "https://app.datadoghq.com/monitors/148829331",
+  "date": "1795511700000"
+}

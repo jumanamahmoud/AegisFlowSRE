@@ -17,6 +17,7 @@ from typing import Any
 from supabase import Client
 
 from models.incident import (
+    ACTIVE_STATUSES,
     AuditEventType,
     IncidentStatus,
     validate_transition,
@@ -42,6 +43,16 @@ class AnalysisAlreadyPendingError(RuntimeError):
 
 class ConcurrentUpdateError(RuntimeError):
     """The incident's status changed between our read and our write."""
+
+
+class DuplicateActiveIncidentError(RuntimeError):
+    """Another active incident already tracks this alert fingerprint
+    (the ``incidents_active_fingerprint_uidx`` unique index fired)."""
+
+
+def is_unique_violation(exc: Exception) -> bool:
+    """True for Postgres error 23505 as surfaced by PostgREST / supabase-py."""
+    return getattr(exc, "code", None) == "23505" or "23505" in str(exc)
 
 
 def _now_iso() -> str:
@@ -119,27 +130,51 @@ class IncidentStore:
         alert: str,
         metadata: dict | None = None,
         actor: str = "system",
+        *,
+        source: str | None = None,
+        fingerprint: str | None = None,
     ) -> dict:
-        incident = (
-            self._sb.table(INCIDENTS)
-            .insert(
-                {
-                    "service_id": service_id,
-                    "alert": alert,
-                    "metadata": metadata or {},
-                    "status": IncidentStatus.OPEN.value,
-                }
-            )
-            .execute()
-            .data[0]
-        )
-        self.append_event(
-            incident["id"],
-            AuditEventType.INCIDENT_CREATED,
-            {"service_id": service_id, "status": IncidentStatus.OPEN.value},
-            actor=actor,
-        )
+        """Insert an ``open`` incident and its ``incident.created`` event.
+
+        With a ``fingerprint``, raises ``DuplicateActiveIncidentError`` if an
+        active incident already has it (enforced by a unique index, so this
+        holds even for concurrent requests).
+        """
+        row = {
+            "service_id": service_id,
+            "alert": alert,
+            "metadata": metadata or {},
+            "status": IncidentStatus.OPEN.value,
+        }
+        if source is not None:
+            row["source"] = source
+        if fingerprint is not None:
+            row["fingerprint"] = fingerprint
+        try:
+            incident = self._sb.table(INCIDENTS).insert(row).execute().data[0]
+        except Exception as exc:
+            if fingerprint is not None and is_unique_violation(exc):
+                raise DuplicateActiveIncidentError(fingerprint) from exc
+            raise
+        payload = {"service_id": service_id, "status": IncidentStatus.OPEN.value}
+        if source is not None:
+            payload["source"] = source
+        self.append_event(incident["id"], AuditEventType.INCIDENT_CREATED, payload, actor=actor)
         return incident
+
+    def find_active_by_fingerprint(self, fingerprint: str) -> dict | None:
+        """The open/acknowledged/mitigating incident that owns ``fingerprint``."""
+        rows = (
+            self._sb.table(INCIDENTS)
+            .select("*")
+            .eq("fingerprint", fingerprint)
+            .in_("status", [s.value for s in ACTIVE_STATUSES])
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+            .data
+        )
+        return rows[0] if rows else None
 
     def get_incident(self, incident_id: str) -> dict:
         # incidents.id is a Postgres uuid: a malformed value would make the
@@ -190,6 +225,12 @@ class IncidentStore:
                 .data
             )
         except Exception as exc:
+            if is_unique_violation(exc):
+                # Re-opening, while a newer incident already tracks the same alert.
+                raise DuplicateActiveIncidentError(
+                    f"Cannot re-open incident {incident_id}: another active incident "
+                    "already tracks the same alert"
+                ) from exc
             if "PGRST202" in str(exc) or "Could not find the function" in str(exc):
                 raise RuntimeError(
                     f"Database function {CHANGE_STATUS_FN} is missing. Apply "
