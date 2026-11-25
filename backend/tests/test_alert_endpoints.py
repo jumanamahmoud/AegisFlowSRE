@@ -28,12 +28,13 @@ from core.auth import Principal, Role, get_current_user
 from database.incident_store import IncidentStore
 from database.supabase_client import get_supabase
 from routers.admin import admin_router
-from routers.alerts import get_sns_confirmer
+from routers.alerts import get_service_map, get_sns_confirmer
 from routers.alerts import router as alerts_router
 from routers.incidents import router as incidents_router
 from routers.maintenance import router as maintenance_router
 from services.analysis_queue import AnalysisQueue, get_analysis_queue
 from tests.conftest import make_pipeline_state
+from tests.fake_graph import FakeServiceGraph
 from tests.fakes import FakeSupabase
 
 SAMPLES = Path(__file__).resolve().parent.parent / "samples" / "webhooks"
@@ -64,6 +65,8 @@ class Env:
         o[get_analysis_queue] = lambda: self.queue
         o[get_api_key_lookup] = lambda: self.lookup
         o[get_sns_confirmer] = lambda: self.confirmed.append
+        self.graph = FakeServiceGraph()  # empty map: no cross-service grouping here
+        o[get_service_map] = lambda: self.graph
         self.client = TestClient(self.app)
 
     def login(self, principal: Principal | None):

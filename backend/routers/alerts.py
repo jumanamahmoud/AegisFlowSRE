@@ -12,7 +12,7 @@ GET  /alerts/{alert_id}                     viewer: one alert, with its raw payl
 
 ``source`` is one of alertmanager, grafana, datadog, cloudwatch. Each webhook
 call answers 202 with what happened to every alert it carried
-(created / deduplicated / suppressed / resolved / ignored). Set-up for each
+(created / deduplicated / grouped / suppressed / resolved / ignored). Set-up for each
 tool: docs/alert-intake.md.
 """
 
@@ -36,6 +36,7 @@ from core.auth import Principal, Role, require_role
 from core.logging import request_id_var
 from database.alert_store import AlertNotFoundError, AlertStore
 from database.incident_store import IncidentStore
+from database.neo4j_client import get_neo4j_client
 from database.supabase_client import get_supabase
 from models.incident import AuditEventType
 from services.alert_intake import AlertIntake
@@ -47,7 +48,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["alerts"])
 
 AlertSource = Literal["alertmanager", "grafana", "datadog", "cloudwatch"]
-Disposition = Literal["received", "created", "deduplicated", "suppressed", "resolved", "ignored"]
+Disposition = Literal["received", "created", "deduplicated", "grouped", "suppressed", "resolved", "ignored"]
 
 MAX_BODY_BYTES = int(os.environ.get("AEGIS_WEBHOOK_MAX_BYTES", str(1024 * 1024)))
 MAX_ALERTS_PER_CALL = int(os.environ.get("AEGIS_WEBHOOK_MAX_ALERTS", "200"))
@@ -62,10 +63,22 @@ def get_alert_store(sb: Client = Depends(get_supabase)) -> AlertStore:
     return AlertStore(sb)
 
 
+def get_service_map():
+    """The Neo4j service map used to group related alerts (FR-13). If it can't
+    be reached, alerts are still accepted, just not grouped across services."""
+    try:
+        return get_neo4j_client()
+    except Exception:
+        logger.warning("service map unavailable; cross-service grouping disabled", exc_info=True)
+        return None
+
+
 def get_alert_intake(
-    sb: Client = Depends(get_supabase), queue: AnalysisQueue = Depends(get_analysis_queue)
+    sb: Client = Depends(get_supabase),
+    queue: AnalysisQueue = Depends(get_analysis_queue),
+    service_map=Depends(get_service_map),
 ) -> AlertIntake:
-    return AlertIntake(IncidentStore(sb), AlertStore(sb), queue)
+    return AlertIntake(IncidentStore(sb), AlertStore(sb), queue, service_map=service_map)
 
 
 # --- AWS SNS subscription confirmation -------------------------------------
@@ -110,6 +123,7 @@ class IntakeResultResponse(BaseModel):
     incident_id: Optional[str] = None
     maintenance_window_id: Optional[str] = None
     analysis_queued: bool = False
+    grouped_via: Optional[dict[str, Any]] = None
 
 
 class WebhookAcceptedResponse(BaseModel):
@@ -147,6 +161,7 @@ class AlertResponse(BaseModel):
     disposition: Disposition
     incident_id: Optional[str] = None
     maintenance_window_id: Optional[str] = None
+    grouped_via: Optional[dict[str, Any]] = None
     received_by: str
     received_at: str
     processed_at: Optional[str] = None

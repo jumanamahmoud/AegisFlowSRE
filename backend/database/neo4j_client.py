@@ -239,6 +239,280 @@ class Neo4jClient:
             ]
 
 
+    # ------------------------------------------------------------------
+    # Service map management (FR-29) — nothing is ever deleted: retiring a
+    # service or a dependency closes it (valid_to / retired_at), so the map
+    # as it was at the time of any incident can still be read back.
+    # ------------------------------------------------------------------
+
+    @_retry_reads
+    def list_services(self, include_retired: bool = False) -> list[dict]:
+        query = """
+        MATCH (s:Service)
+        WHERE $include_retired OR s.retired_at IS NULL
+        RETURN s ORDER BY s.id
+        """
+        with self.driver.session() as session:
+            return [_service_dict(r["s"]) for r in session.run(query, include_retired=include_retired)]
+
+    @_retry_reads
+    def get_service(self, service_id: str) -> dict | None:
+        with self.driver.session() as session:
+            record = session.run("MATCH (s:Service {id: $id}) RETURN s", id=service_id).single()
+            return _service_dict(record["s"]) if record else None
+
+    def create_service(self, service_id: str, name: str, type_: str = "service", tier: str | None = None) -> dict:
+        def work(tx):
+            if tx.run("MATCH (s:Service {id: $id}) RETURN s", id=service_id).single():
+                raise ServiceExistsError(service_id)
+            record = tx.run(
+                "CREATE (s:Service {id: $id, name: $name, type: $type, tier: $tier, created_at: datetime()}) "
+                "RETURN s",
+                id=service_id, name=name, type=type_, tier=tier,
+            ).single()
+            return _service_dict(record["s"])
+
+        with self.driver.session() as session:
+            return session.execute_write(work)
+
+    def update_service(self, service_id: str, changes: dict) -> dict:
+        allowed = {k: v for k, v in changes.items() if k in ("name", "type", "tier")}
+
+        def work(tx):
+            record = tx.run(
+                "MATCH (s:Service {id: $id}) WHERE s.retired_at IS NULL "
+                "SET s += $changes, s.updated_at = datetime() RETURN s",
+                id=service_id, changes=allowed,
+            ).single()
+            if record is None:
+                raise ServiceNotFoundError(service_id)
+            return _service_dict(record["s"])
+
+        with self.driver.session() as session:
+            return session.execute_write(work)
+
+    def retire_service(self, service_id: str) -> int:
+        """Mark a service retired and close every active link to or from it.
+        Returns how many links were closed."""
+
+        def work(tx):
+            if not tx.run("MATCH (s:Service {id: $id}) WHERE s.retired_at IS NULL RETURN s",
+                          id=service_id).single():
+                raise ServiceNotFoundError(service_id)
+            record = tx.run(
+                """
+                MATCH (s:Service {id: $id})
+                SET s.retired_at = datetime()
+                WITH s
+                OPTIONAL MATCH (s)-[r:DEPENDS_ON]-()
+                WHERE r.valid_to IS NULL
+                SET r.valid_to = datetime()
+                RETURN count(r) AS closed
+                """,
+                id=service_id,
+            ).single()
+            return record["closed"]
+
+        with self.driver.session() as session:
+            return session.execute_write(work)
+
+    def set_dependency(
+        self, service_id: str, target_id: str, target_kind: str = "service", protocol: str = "HTTPS",
+        target_type: str | None = None,
+    ) -> str:
+        """Make ``service_id`` depend on a service or an external system.
+
+        Returns 'created', 'updated' (protocol changed: the old link is closed
+        and a new one starts) or 'unchanged' (no new history is written).
+        """
+        if target_kind not in ("service", "external"):
+            raise InvalidDependencyError("target_kind must be 'service' or 'external'")
+        if target_kind == "service" and target_id == service_id:
+            raise InvalidDependencyError("a service cannot depend on itself")
+
+        def work(tx):
+            if not tx.run("MATCH (s:Service {id: $id}) WHERE s.retired_at IS NULL RETURN s",
+                          id=service_id).single():
+                raise ServiceNotFoundError(service_id)
+            if target_kind == "service":
+                if not tx.run("MATCH (t:Service {id: $id}) WHERE t.retired_at IS NULL RETURN t",
+                              id=target_id).single():
+                    raise ServiceNotFoundError(target_id)
+                target = "MATCH (t:Service {id: $tid})"
+            else:
+                tx.run(
+                    "MERGE (t:ExternalSystem {name: $tid}) "
+                    "ON CREATE SET t.type = coalesce($ttype, 'external'), t.created_at = datetime()",
+                    tid=target_id, ttype=target_type,
+                )
+                target = "MATCH (t:ExternalSystem {name: $tid})"
+            existing = tx.run(
+                f"MATCH (s:Service {{id: $sid}}) {target} "
+                "MATCH (s)-[r:DEPENDS_ON]->(t) WHERE r.valid_to IS NULL RETURN r.protocol AS protocol",
+                sid=service_id, tid=target_id,
+            ).single()
+            if existing is not None and existing["protocol"] == protocol:
+                return "unchanged"
+            tx.run(
+                f"MATCH (s:Service {{id: $sid}}) {target} "
+                "OPTIONAL MATCH (s)-[r:DEPENDS_ON]->(t) WHERE r.valid_to IS NULL "
+                "SET r.valid_to = datetime() "
+                "WITH DISTINCT s, t "
+                "CREATE (s)-[:DEPENDS_ON {valid_from: datetime(), protocol: $protocol}]->(t)",
+                sid=service_id, tid=target_id, protocol=protocol,
+            )
+            return "created" if existing is None else "updated"
+
+        with self.driver.session() as session:
+            return session.execute_write(work)
+
+    def remove_dependency(self, service_id: str, target_id: str, target_kind: str = "service") -> bool:
+        """Close the active link. False if there was none."""
+        if target_kind not in ("service", "external"):
+            raise InvalidDependencyError("target_kind must be 'service' or 'external'")
+        target = "(t:Service {id: $tid})" if target_kind == "service" else "(t:ExternalSystem {name: $tid})"
+        query = (
+            f"MATCH (s:Service {{id: $sid}})-[r:DEPENDS_ON]->{target} "
+            "WHERE r.valid_to IS NULL SET r.valid_to = datetime() RETURN count(r) AS closed"
+        )
+        with self.driver.session() as session:
+            record = session.run(query, sid=service_id, tid=target_id).single()
+            return bool(record and record["closed"])
+
+    @_retry_reads
+    def get_dependencies(self, service_id: str, at: str | None = None) -> list[dict]:
+        """Direct dependencies, active now, or as they were at time ``at``
+        (ISO 8601). Includes when each link started and ended."""
+        query = """
+        MATCH (:Service {id: $id})-[r:DEPENDS_ON]->(t)
+        WHERE ($at IS NULL AND r.valid_to IS NULL)
+           OR ($at IS NOT NULL AND r.valid_from <= datetime($at)
+               AND (r.valid_to IS NULL OR r.valid_to > datetime($at)))
+        RETURN coalesce(t.id, t.name) AS id, coalesce(t.name, t.id) AS name,
+               coalesce(t.type, labels(t)[0]) AS type,
+               CASE WHEN t:Service THEN 'service' ELSE 'external' END AS kind,
+               r.protocol AS protocol, r.valid_from AS valid_from, r.valid_to AS valid_to
+        ORDER BY id
+        """
+        with self.driver.session() as session:
+            return [_edge_dict(r) for r in session.run(query, id=service_id, at=at)]
+
+    @_retry_reads
+    def get_dependents(self, service_id: str) -> list[dict]:
+        """Services that directly depend on ``service_id`` right now."""
+        query = """
+        MATCH (d:Service)-[r:DEPENDS_ON]->(:Service {id: $id})
+        WHERE r.valid_to IS NULL
+        RETURN d.id AS id, d.name AS name, coalesce(d.type, 'Service') AS type, 'service' AS kind,
+               r.protocol AS protocol, r.valid_from AS valid_from, r.valid_to AS valid_to
+        ORDER BY id
+        """
+        with self.driver.session() as session:
+            return [_edge_dict(r) for r in session.run(query, id=service_id)]
+
+    @_retry_reads
+    def get_dependency_history(self, service_id: str) -> list[dict]:
+        """Every dependency link the service ever had, newest first."""
+        query = """
+        MATCH (:Service {id: $id})-[r:DEPENDS_ON]->(t)
+        RETURN coalesce(t.id, t.name) AS id, coalesce(t.name, t.id) AS name,
+               coalesce(t.type, labels(t)[0]) AS type,
+               CASE WHEN t:Service THEN 'service' ELSE 'external' END AS kind,
+               r.protocol AS protocol, r.valid_from AS valid_from, r.valid_to AS valid_to
+        ORDER BY r.valid_from DESC
+        """
+        with self.driver.session() as session:
+            return [_edge_dict(r) for r in session.run(query, id=service_id)]
+
+    # ------------------------------------------------------------------
+    # Alert grouping (FR-13)
+    # ------------------------------------------------------------------
+
+    @_retry_reads
+    def find_shared_dependencies(
+        self, service_id: str, other_ids: list[str], max_hops: int = 2
+    ) -> dict[str, dict]:
+        """For each service in ``other_ids``, the closest component that both it
+        and ``service_id`` depend on (directly or through up to ``max_hops``
+        active links). A service counts as depending on itself, so if one
+        service depends on the other, the other is the shared component.
+
+        Returns ``{other_id: {id, name, type, kind, hops_a, hops_b}}`` with
+        only the related services; ``hops_a`` is the distance from
+        ``service_id``, ``hops_b`` from the other service.
+        """
+        if not other_ids:
+            return {}
+        hops = max(1, int(max_hops))
+        query = f"""
+        MATCH (a:Service {{id: $sid}})
+        UNWIND $others AS oid
+        MATCH (b:Service {{id: oid}})
+        MATCH pa = (a)-[:DEPENDS_ON*0..{hops}]->(c)
+        WHERE all(r IN relationships(pa) WHERE r.valid_to IS NULL)
+        MATCH pb = (b)-[:DEPENDS_ON*0..{hops}]->(c)
+        WHERE all(r IN relationships(pb) WHERE r.valid_to IS NULL)
+        WITH oid, c, min(length(pa)) AS ha, min(length(pb)) AS hb
+        ORDER BY ha + hb, ha
+        WITH oid, collect({{
+            id: coalesce(c.id, c.name), name: coalesce(c.name, c.id),
+            type: coalesce(c.type, labels(c)[0]),
+            kind: CASE WHEN c:Service THEN 'service' ELSE 'external' END,
+            hops_a: ha, hops_b: hb
+        }})[0] AS best
+        RETURN oid, best
+        """
+        with self.driver.session() as session:
+            return {r["oid"]: dict(r["best"]) for r in session.run(query, sid=service_id, others=list(other_ids))}
+
+
+class ServiceNotFoundError(LookupError):
+    pass
+
+
+class ServiceExistsError(RuntimeError):
+    pass
+
+
+class InvalidDependencyError(ValueError):
+    pass
+
+
+def _iso(value) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "iso_format"):  # neo4j.time.DateTime
+        return value.iso_format()
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _service_dict(node) -> dict:
+    props = dict(node)
+    return {
+        "id": props.get("id"),
+        "name": props.get("name") or props.get("id"),
+        "type": props.get("type") or "service",
+        "tier": props.get("tier"),
+        "created_at": _iso(props.get("created_at")),
+        "updated_at": _iso(props.get("updated_at")),
+        "retired_at": _iso(props.get("retired_at")),
+    }
+
+
+def _edge_dict(record) -> dict:
+    return {
+        "id": record["id"],
+        "name": record["name"],
+        "type": record["type"],
+        "kind": record["kind"],
+        "protocol": record["protocol"],
+        "valid_from": _iso(record["valid_from"]),
+        "valid_to": _iso(record["valid_to"]),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Module-level singleton
 # ---------------------------------------------------------------------------

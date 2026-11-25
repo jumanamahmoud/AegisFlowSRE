@@ -49,10 +49,17 @@ _DEFAULTS = {
         "analysis_updated_at": None,
         "source": None,
         "fingerprint": None,
+        "probable_cause": None,
+        "grouped_services": [],
+        "needs_review": False,
+        "review_reasons": [],
+        "reviewed_at": None,
+        "reviewed_by": None,
         "created_at": _now(),
         "updated_at": _now(),
     },
-    "incident_analyses": lambda: {"id": str(uuid.uuid4()), "created_at": _now()},
+    "incident_analyses": lambda: {"id": str(uuid.uuid4()), "created_at": _now(), "category_confidence": None,
+                                  "severity_confidence": None, "needs_review": False, "review_reasons": []},
     "audit_events": lambda: {"actor": "system", "payload": {}, "recorded_at": _now()},
     "api_keys": lambda: {
         "id": str(uuid.uuid4()), "source": None, "created_at": _now(),
@@ -65,7 +72,7 @@ _DEFAULTS = {
     "alerts": lambda: {
         "id": str(uuid.uuid4()), "external_id": None, "description": None, "source_severity": None,
         "labels": {}, "url": None, "starts_at": None, "raw": {}, "disposition": "received",
-        "incident_id": None, "maintenance_window_id": None, "api_key_id": None,
+        "incident_id": None, "maintenance_window_id": None, "api_key_id": None, "grouped_via": None,
         "received_at": _now(), "processed_at": None,
     },
 }

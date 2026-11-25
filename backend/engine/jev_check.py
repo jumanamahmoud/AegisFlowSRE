@@ -288,6 +288,38 @@ def get_jev_client() -> TypeSafeClient:
     return TypeSafeClient(model=JEV_MODEL, retry=retry, timeout=timeout)
 
 
+def classify(alert: str, service_id: str) -> dict:
+    """System 1 triage of one (already sanitized) alert.
+
+    Returns incident_category, severity_score (0-3), escalation_noul (0-1)
+    and the confidence Jev reports for the category and the severity (None if
+    not reported). Used by the pipeline's jev_gate and by calibration.
+    """
+    client = get_jev_client()
+    try:
+        response = client.system_one(
+            state={"alert": alert, "system": {"name": service_id}},
+            questions=QUESTIONS,
+        )
+    finally:
+        client.close()
+
+    category = response.choices["incident_category"]
+    severity = response.scores["severity"]
+
+    def _conf(answer) -> float | None:
+        value = getattr(answer, "confidence", None)
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+    return {
+        "incident_category": category.choice,
+        "severity_score": round(severity.score),
+        "escalation_noul": response.nouls["needs_escalation"].noul,
+        "category_confidence": _conf(category),
+        "severity_confidence": _conf(severity),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------

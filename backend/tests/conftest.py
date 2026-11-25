@@ -57,6 +57,9 @@ def make_pipeline_state(
     source="llm",
     model="openai/gpt-oss-120b",
     blast_radius=None,
+    category_confidence=0.9,
+    severity_confidence=0.85,
+    review_reasons=None,
 ):
     """Build a realistic final pipeline state (what execute_pipeline returns).
 
@@ -67,7 +70,9 @@ def make_pipeline_state(
     meta = {"analysis_source": source, "model_name": model if source == "llm" else None}
     if source == "llm":
         meta.update(prompt_tokens=412, completion_tokens=230, total_tokens=642, llm_latency_ms=1840)
-    jev = {"incident_category": category, "severity_score": severity_score, "escalation_noul": noul}
+    jev = {"incident_category": category, "severity_score": severity_score, "escalation_noul": noul,
+           "category_confidence": category_confidence, "severity_confidence": severity_confidence,
+           "needs_review": bool(review_reasons), "review_reasons": list(review_reasons or [])}
     ai_event = {"llm": "ai.invoked", "fallback": "ai.fallback", "skipped": "ai.skipped"}[source]
     return {
         "alert": "alert",

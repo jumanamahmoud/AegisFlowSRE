@@ -89,6 +89,15 @@ class AuditEventType(str, Enum):
     API_KEY_CREATED = "api_key.created"
     API_KEY_REVOKED = "api_key.revoked"
     INTEGRATION_CONFIRMED = "integration.subscription_confirmed"
+    # Phase 4 — smart triage and service map management
+    ALERT_GROUPED = "alert.grouped"
+    TRIAGE_REVIEW_REQUESTED = "triage.review_requested"
+    TRIAGE_REVIEWED = "triage.reviewed"
+    SERVICE_CREATED = "service.created"
+    SERVICE_UPDATED = "service.updated"
+    SERVICE_RETIRED = "service.retired"
+    DEPENDENCY_SET = "dependency.set"
+    DEPENDENCY_REMOVED = "dependency.removed"
 
 
 #: Statuses in which an incident still "owns" its alert fingerprint: a repeat

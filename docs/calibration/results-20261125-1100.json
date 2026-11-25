@@ -1,0 +1,226 @@
+{
+  "model": "jev-1.13.0",
+  "run_at": "2026-11-25 11:00 UTC",
+  "results": [
+    {
+      "id": "cal-01",
+      "service_id": "payment-service",
+      "expected_category": "application",
+      "expected_severity": 3,
+      "incident_category": "unknown",
+      "severity_score": 3,
+      "escalation_noul": 0.94,
+      "category_confidence": 0.6,
+      "severity_confidence": 1.0
+    },
+    {
+      "id": "cal-02",
+      "service_id": "payment-service",
+      "expected_category": "database",
+      "expected_severity": 3,
+      "incident_category": "database",
+      "severity_score": 2,
+      "escalation_noul": 0.86,
+      "category_confidence": 1.0,
+      "severity_confidence": 0.51
+    },
+    {
+      "id": "cal-03",
+      "service_id": "api-gateway",
+      "expected_category": "security",
+      "expected_severity": 3,
+      "incident_category": "security",
+      "severity_score": 3,
+      "escalation_noul": 0.88,
+      "category_confidence": 1.0,
+      "severity_confidence": 0.74
+    },
+    {
+      "id": "cal-04",
+      "service_id": "fraud-service",
+      "expected_category": "security",
+      "expected_severity": 3,
+      "incident_category": "security",
+      "severity_score": 1,
+      "escalation_noul": 0.92,
+      "category_confidence": 1.0,
+      "severity_confidence": 0.1
+    },
+    {
+      "id": "cal-05",
+      "service_id": "order-service",
+      "expected_category": "infrastructure",
+      "expected_severity": 3,
+      "incident_category": "infrastructure",
+      "severity_score": 2,
+      "escalation_noul": 0.84,
+      "category_confidence": 1.0,
+      "severity_confidence": 0.99
+    },
+    {
+      "id": "cal-06",
+      "service_id": "checkout-service",
+      "expected_category": "application",
+      "expected_severity": 2,
+      "incident_category": "application",
+      "severity_score": 2,
+      "escalation_noul": 0.77,
+      "category_confidence": 1.0,
+      "severity_confidence": 0.95
+    },
+    {
+      "id": "cal-07",
+      "service_id": "payment-service",
+      "expected_category": "dependency",
+      "expected_severity": 2,
+      "incident_category": "dependency",
+      "severity_score": 1,
+      "escalation_noul": 0.38,
+      "category_confidence": 1.0,
+      "severity_confidence": 0.59
+    },
+    {
+      "id": "cal-08",
+      "service_id": "payment-service",
+      "expected_category": "infrastructure",
+      "expected_severity": 2,
+      "incident_category": "dependency",
+      "severity_score": 2,
+      "escalation_noul": 0.78,
+      "category_confidence": 0.44,
+      "severity_confidence": 0.81
+    },
+    {
+      "id": "cal-09",
+      "service_id": "order-service",
+      "expected_category": "database",
+      "expected_severity": 2,
+      "incident_category": "database",
+      "severity_score": 1,
+      "escalation_noul": 0.46,
+      "category_confidence": 1.0,
+      "severity_confidence": 0.77
+    },
+    {
+      "id": "cal-10",
+      "service_id": "notification-service",
+      "expected_category": "dependency",
+      "expected_severity": 2,
+      "incident_category": "dependency",
+      "severity_score": 2,
+      "escalation_noul": 0.45,
+      "category_confidence": 1.0,
+      "severity_confidence": 0.83
+    },
+    {
+      "id": "cal-11",
+      "service_id": "checkout-service",
+      "expected_category": "application",
+      "expected_severity": 1,
+      "incident_category": "unknown",
+      "severity_score": 1,
+      "escalation_noul": 0.19,
+      "category_confidence": 0.48,
+      "severity_confidence": 0.97
+    },
+    {
+      "id": "cal-12",
+      "service_id": "order-service",
+      "expected_category": "infrastructure",
+      "expected_severity": 1,
+      "incident_category": "infrastructure",
+      "severity_score": 0,
+      "escalation_noul": 0.12,
+      "category_confidence": 0.96,
+      "severity_confidence": 0.64
+    },
+    {
+      "id": "cal-13",
+      "service_id": "fraud-service",
+      "expected_category": "application",
+      "expected_severity": 1,
+      "incident_category": "application",
+      "severity_score": 1,
+      "escalation_noul": 0.45,
+      "category_confidence": 0.41,
+      "severity_confidence": 0.6
+    },
+    {
+      "id": "cal-14",
+      "service_id": "payment-service",
+      "expected_category": "database",
+      "expected_severity": 1,
+      "incident_category": "database",
+      "severity_score": 0,
+      "escalation_noul": 0.12,
+      "category_confidence": 1.0,
+      "severity_confidence": 0.99
+    },
+    {
+      "id": "cal-15",
+      "service_id": "api-gateway",
+      "expected_category": "infrastructure",
+      "expected_severity": 1,
+      "incident_category": "infrastructure",
+      "severity_score": 1,
+      "escalation_noul": 0.11,
+      "category_confidence": 0.63,
+      "severity_confidence": 0.31
+    },
+    {
+      "id": "cal-16",
+      "service_id": "notification-service",
+      "expected_category": "infrastructure",
+      "expected_severity": 0,
+      "incident_category": "application",
+      "severity_score": 0,
+      "escalation_noul": 0.11,
+      "category_confidence": 0.6,
+      "severity_confidence": 0.98
+    },
+    {
+      "id": "cal-17",
+      "service_id": "checkout-service",
+      "expected_category": "application",
+      "expected_severity": 0,
+      "incident_category": "application",
+      "severity_score": 0,
+      "escalation_noul": 0.04,
+      "category_confidence": 0.63,
+      "severity_confidence": 0.83
+    },
+    {
+      "id": "cal-18",
+      "service_id": "order-service",
+      "expected_category": "database",
+      "expected_severity": 0,
+      "incident_category": "unknown",
+      "severity_score": 0,
+      "escalation_noul": 0.07,
+      "category_confidence": 0.46,
+      "severity_confidence": 1.0
+    },
+    {
+      "id": "cal-19",
+      "service_id": "fraud-service",
+      "expected_category": "unknown",
+      "expected_severity": 1,
+      "incident_category": "unknown",
+      "severity_score": 0,
+      "escalation_noul": 0.21,
+      "category_confidence": 0.5,
+      "severity_confidence": 0.57
+    },
+    {
+      "id": "cal-20",
+      "service_id": "payment-service",
+      "expected_category": "unknown",
+      "expected_severity": 0,
+      "incident_category": "unknown",
+      "severity_score": 1,
+      "escalation_noul": 0.25,
+      "category_confidence": 0.51,
+      "severity_confidence": 0.79
+    }
+  ]
+}

@@ -18,6 +18,7 @@ tool ──► POST /alerts/webhooks/{source}   (API key)
 |----------------|---------|
 | `created`      | Opened a new incident |
 | `deduplicated` | A repeat of an alert whose incident is still open, acknowledged or mitigating |
+| `grouped`      | Phase 4: a different alert, for the same service or one that shares a dependency with a recent incident's service, joined that incident. See [smart-triage.md](smart-triage.md) |
 | `suppressed`   | The service was in a maintenance window |
 | `resolved`     | The tool reported recovery. This is noted on the incident's timeline, but the status is **not** changed (people resolve incidents) |
 | `ignored`      | Information only (e.g. CloudWatch `INSUFFICIENT_DATA`), or a recovery with no open incident |

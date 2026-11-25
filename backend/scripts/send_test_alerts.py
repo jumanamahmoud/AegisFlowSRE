@@ -1,8 +1,13 @@
 """
 backend/scripts/send_test_alerts.py
 ====================================
-Live Week 3 check: send a test alert from each monitoring tool to a running
-backend, twice, and confirm each creates exactly one incident.
+Live Phase 3 check: send a test alert from each monitoring tool to a running
+backend, twice, and confirm the repeat never creates a second incident.
+
+Since Phase 4, the first copy may be "grouped" into another incident instead
+of "created" (e.g. checkout-service's alert joins payment-service's incident
+because checkout depends on payment). The repeat must still be
+"deduplicated" into that same incident.
 
 Every run tags the samples with a fresh run id, so earlier runs' open
 incidents don't turn this run's alerts into duplicates.
@@ -89,14 +94,14 @@ def main() -> int:
                 results.append(resp.json()["results"][0])
             else:
                 first, second = results
-                passed = (first["disposition"] == "created" and second["disposition"] == "deduplicated"
+                passed = (first["disposition"] in ("created", "grouped") and second["disposition"] == "deduplicated"
                           and first["incident_id"] == second["incident_id"])
                 ok &= passed
                 mark = "" if passed else "   <-- FAILED"
                 print(f"{file:24} {first['disposition']:10} {second['disposition']:14} "
                       f"{first['incident_id']}{mark}")
 
-    print("\nPASS: each source created exactly one incident" if ok else "\nFAIL")
+    print("\nPASS: no source created a duplicate incident" if ok else "\nFAIL")
     return 0 if ok else 1
 
 
